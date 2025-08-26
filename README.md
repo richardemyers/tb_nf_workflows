@@ -23,5 +23,16 @@ Examples:
 ------------------------------------------------------------------------
 nextflow run tb-typing.SMED.nf --filetype fastq --input_dir fq_dir --pattern "*_{1,2}.fastq.gz" --output_dir output_dir
 
+Current in use containers:
+         - tb_qaat_container = "$container_path/tb_typing/tb_typing_qaat.sinimg" 
+         - hostile_container = "$container_path/tb_typing/tb_typing_hostile.sinimg" - Due to be replaced with tb or not tb
+         - tb_or_not_tb_container = "$container_path/tb_typing/tb_typing_tb_or_not_tb_1_1.sinimg"
+         - mykrobe_container = "$container_path/tb_typing/tb_typing_mykrobe_0.4.sinimg" - placeholder during testing
+         - afanc_container = "$container_path/tb_typing/tb_typing_afanc_0_3.sinimg" - placeholder during testing
+         - clockwork_container = "$container_path/tb_typing/tb_typing_clockwork_v0.12.5.sinimg" - due to be removed
+         - tbprofiler_container = "$container_path/tb_typing/tb_profiler_default_genome_v6.6.5.sinimg"
+         - fastlin_container = "$container_path/tb_typing/tb_typing_fastlin_0_1.sinimg"
+         - snippy_container = "$container_path/tb_typing/tb_typing_snippy.sif" - due to be replaced
 
-To note: current code includes clockwork as the assembler - this is due to be replaced in the live version with tb-profiler
+Date to support container exection - will be made available over sftp
+  
