@@ -1,6 +1,5 @@
 # tb_nf_workflows
 
-========================================================================
 M Y C O B A C T E R I A L  P I P E L I N E
 
 Cleans and QCs reads with fastp and FastQC, removes human/viral reads using hostile/tb_or_not_tb,
@@ -23,6 +22,6 @@ Mandatory and conditional parameters:
 Examples:
 ------------------------------------------------------------------------
 nextflow run tb-typing.SMED.nf --filetype fastq --input_dir fq_dir --pattern "*_{1,2}.fastq.gz" --output_dir output_dir
-========================================================================
+
 
 To note: current code includes clockwork as the assembler - this is due to be replaced in the live version with tb-profiler
