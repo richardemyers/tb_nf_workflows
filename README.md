@@ -23,6 +23,8 @@ Examples:
 ------------------------------------------------------------------------
 nextflow run tb-typing.SMED.nf --filetype fastq --input_dir fq_dir --pattern "*_{1,2}.fastq.gz" --output_dir output_dir
 
+Containers in use:
+------------------------------------------------------------------------
 Current in use containers:
          - tb_qaat_container = "$container_path/tb_typing/tb_typing_qaat.sinimg" 
          - hostile_container = "$container_path/tb_typing/tb_typing_hostile.sinimg" - Due to be replaced with tb or not tb
