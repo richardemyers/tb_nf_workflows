@@ -14,76 +14,28 @@ process tbprofiler_update_db {
     """
 }
 
-//take vcf file from clockwork as input
-process tbprofiler{
-    tag { sample_name }
-    label 'tbprofiler'
-    
-    publishDir "${params.output_dir}/${sample_name}/antibiogram", mode: 'copy', pattern: '*.tbprofiler-out.json', overwrite: 'true'
-    publishDir "${params.output_dir}/${sample_name}", mode: 'copy', overwrite: 'true', pattern: '*{_err.json,_report.json}'
-
-    input:
-    tuple val(sample_name), path(minos_vcf), path(report_json), val(isSampleTB)
-
-    output:
-    tuple val(sample_name), path("${sample_name}.tbprofiler-out.json"), path("${sample_name}_report.json"), emit: tbprofiler_json
-    path("${sample_name}/${sample_name}.results.json"), emit: collate_json
-    tuple val(sample_name), path(minos_vcf), path(report_json), emit: vcfmix_in
-
-    when:
-    isSampleTB =~ /CREATE\_ANTIBIOGRAM\_${sample_name}/
-
-    script:
-    error_log = "${sample_name}_err.json"
-    tbprofiler_json = "${sample_name}.tbprofiler-out.json"
-    
-    """
-    #keep the original vcf so we can collate the output and pass it down
-    cp ${minos_vcf} tmp.vcf
-    bgzip ${minos_vcf}
-    mv tmp.vcf ${minos_vcf}
-    
-    mkdir tmp
-    tb-profiler profile --vcf ${minos_vcf}.gz --threads ${task.cpus} --temp tmp --prefix ${sample_name}
-    
-    mv results ${sample_name}
-    cp ${sample_name}/${sample_name}.results.json ${tbprofiler_json}
-    
-    cp ${sample_name}_report.json ${sample_name}_report_previous.json
-
-    echo '{"complete":"workflow complete without error"}' | jq '.' > ${error_log}
-
-    jq -s ".[0] * .[1] * .[2]" ${error_log} ${sample_name}_report_previous.json  ${tbprofiler_json} > ${report_json}
-    """
-
-    stub:
-    """
-    mkdir ${sample_name}
-    touch ${sample_name}.tbprofiler-out.json
-    touch ${sample_name}_report.json
-    touch ${sample_name}/${sample_name}.results.json
-    """
-}
-
 //take fastq file as input
 process tbprofiler_fastq{
     tag { sample_name }
     label 'tbprofiler'
     
-    publishDir "${params.output_dir}/${sample_name}/antibiogram", mode: 'copy', pattern: '*{.tbprofiler-out.json,.bam,.bai,.gz,.csv}', overwrite: 'true'
+    publishDir "${params.output_dir}/${sample_name}/antibiogram", mode: 'copy', pattern: '*{.tbprofiler-out.json,.bam,.bai,.gz,.csv,.txt}', overwrite: 'true'
     publishDir "${params.output_dir}/${sample_name}", mode: 'copy', overwrite: 'true', pattern: '*{_err.json,_report.json}'
+    publishDir "${params.output_dir}/${sample_name}/logs", mode: 'copy', overwrite: 'true', pattern: '*{.err,.log}'
 
-    input:
-    tuple val(sample_name), path(fq1), path(fq2), path(report_json), path(top_hit_report_json), val(doWeAlign), path(species_data)
+    input:  
+    tuple val(sample_name), path(fq1), path(fq2), path(report_json), path(species_data), val(doWeAlign)
 
     output:
-    tuple val(sample_name), path("${sample_name}.tbprofiler-out.json"), path("${sample_name}_report.json"), path("${sample_name}.bam"), path("${sample_name}.bam.bai"), path("${sample_name}.targets.vcf.gz"),  emit: tbprofiler_json
+    tuple val(sample_name), path("${sample_name}.tbprofiler-out.json"), path("${sample_name}.bam"), path("${sample_name}.bam.bai"), path("${sample_name}.targets.vcf.gz"),  emit: tbprofiler_json
     path("${sample_name}/${sample_name}.results.json"), emit: collate_json
     path("${sample_name}.csv"), emit: tbp_csv
+    path("ComponentComplete.txt"), emit: tbprofiler_component_complete optional true
+    path "${sample_name}_tbprofiler_command.err", emit: tbprofiler_err optional true
+    path "${sample_name}_tbprofiler_command.log", emit: tbprofiler_log optional true
 
 
     script:
-    error_log = "${sample_name}_err.json"
     tbprofiler_json = "${sample_name}.tbprofiler-out.json"
     tbprofiler_bam = "${sample_name}.bam"
     tbprofiler_bai = "${sample_name}.bam.bai"
@@ -92,7 +44,7 @@ process tbprofiler_fastq{
     
     """
     mkdir tmp
-    tb-profiler profile -1 ${fq1} -2 ${fq2} --csv --prefix ${sample_name} --threads ${task.cpus} --temp tmp
+    tb-profiler profile -1 ${fq1} -2 ${fq2} --csv --prefix ${sample_name} --threads 2 --temp tmp --call-whole-genome --depth 5,5  --af 0.9,0.9  --strand 1,1  --csv --platform illumina --no_samclip
     
     mv results ${sample_name}
     cp ${sample_name}/${sample_name}.results.json ${tbprofiler_json}
@@ -101,20 +53,14 @@ process tbprofiler_fastq{
     cp bam/${tbprofiler_bam} ${tbprofiler_bam}
     cp bam/${tbprofiler_bai} ${tbprofiler_bai}
     cp vcf/${tbprofiler_vcf} ${tbprofiler_vcf}
-    
-    cp ${sample_name}_report.json ${sample_name}_report_previous.json
 
-    echo '{"complete":"workflow complete without error"}' | jq '.' > ${error_log}
+    if [[ -f ${tbprofiler_bam} && -f ${tbprofiler_bai} && -f  ${tbprofiler_vcf} ]]; then
+         touch ComponentComplete.txt
+    fi    
 
-    jq -s ".[0] * .[1] * .[2]" ${error_log} ${sample_name}_report_previous.json  ${tbprofiler_json} > ${report_json}
-    """
+    cp .command.err "${sample_name}_tbprofiler_command.err"
+    cp .command.log "${sample_name}_tbprofiler_command.log"
 
-    stub:
-    """
-    mkdir ${sample_name}
-    touch ${sample_name}.tbprofiler-out.json
-    touch ${sample_name}_report.json
-    touch ${sample_name}/${sample_name}.results.json
     """
 }
 
@@ -123,16 +69,18 @@ process tbprofiler_collate{
     label 'tbprofiler'
 
     publishDir "${params.output_dir}", mode: 'copy', overwrite: 'true', pattern: 'tbprofiler.variants.csv'
-
+   
     input:
     path(files), stageAs: "results/*"
     
     output:
     path("tbprofiler.variants.csv")
+    
 
     script:
     """
     tb-profiler collate
+
     """
 }
 
@@ -140,97 +88,32 @@ process tbp_parser{
     tag { sample_name }
     label 'tbprofiler'
     
-    publishDir "${params.output_dir}/${sample_name}/tbp_parser", mode: 'copy', pattern: '*.csv', overwrite: 'true'
+    publishDir "${params.output_dir}/${sample_name}/tbp_parser", mode: 'copy', pattern: '*{.csv,.txt}', overwrite: 'true'
     publishDir "${params.output_dir}/${sample_name}/tbp_parser", mode: 'copy', overwrite: 'true', pattern: '*{_err.json,_report.json}'
+    publishDir "${params.output_dir}/${sample_name}/logs", mode: 'copy', overwrite: 'true', pattern: '*{.err,.log}'
 
     input:
-    tuple val(sample_name), path(tbprofiler_report_json), path(sample_report_json), path(bam_path), path(bai_path), path(tbprofiler_vcf)
+    tuple val(sample_name), path(tbprofiler_report_json), path(bam_path), path(bai_path), path(tbprofiler_vcf)
 
     output:
-    tuple val(sample_name), path("${sample_name}.looker_report.csv"), path("${sample_name}.lims_report.csv"), path("${sample_name}.laboratorian_report.csv"), path("${sample_name}.percent_gene_coverage.csv"), emit: tbp_parser_reports_csv
-
+    tuple val(sample_name), path("${sample_name}.looker_report.csv"), path("${sample_name}.lims_report.csv"), path("${sample_name}.laboratorian_report.csv"), path("${sample_name}.locus_coverage_report.csv"), emit: tbp_parser_reports_csv
+    tuple val(sample_name), path(tbprofiler_vcf), path(bam_path), path(bai_path),  emit: tbp_vcf_bam_bai
+    path("ComponentComplete.txt"), emit: tbp_parser_component_complete optional true
+    path "${sample_name}_tbparser_command.err", emit: tbparser_err optional true
+    path "${sample_name}_tbparser_command.log", emit: tbparser_log optional true
+    
     script:
-    error_log = "${sample_name}_err.json"
-    tbp_parser_csv = "${sample_name}.looker_report.csv"
     
     """
-    python3 /opt/tbp-parser/tbp_parser/tbp_parser.py ${tbprofiler_report_json} ${bam_path} -o '${sample_name}' --min_depth 12 --min_frequency 0.9 --sequencing_method 'Illumina NextSeq'
+    tbp-parser ${tbprofiler_report_json} ${bam_path} -o '${sample_name}' --min_frequency 0.9 --sequencing_method 'Illumina NextSeq' --min_depth 5 --min_percent_coverage 0.89 --min_read_support 1
 
-    echo '{"complete":"workflow complete without error"}' | jq '.' > ${error_log}
+    if [[ -f ${sample_name}.looker_report.csv && -f ${sample_name}.lims_report.csv && -f  ${sample_name}.laboratorian_report.csv ]]; then
+         touch ComponentComplete.txt
+    fi  
 
-    """
-
-    stub:
-    """
-    mkdir ${sample_name}
-    touch ${sample_name}/${sample_name}.looker_report.csv
-    """
-}
-
-
-process fastlin{
-    tag { sample_name }
-    label 'fastlin'
-    
-    publishDir "${params.output_dir}/${sample_name}/fastlin", mode: 'copy', pattern: '*.tsv', overwrite: 'true'
-    publishDir "${params.output_dir}/${sample_name}/fastlin", mode: 'copy', overwrite: 'true', pattern: '*{_err.json,_report.json}'
-
-    input:
-    val(sample_name)
-    path(bam_path)
-    path(bai_path)
-
-
-    output:
-    tuple val(sample_name), path("${sample_name}.fastlin.out.tsv"), emit: fastlin_csv
-
-    script:
-    error_log = "${sample_name}_err.json"
-    fastlin_out_csv = "${sample_name}.fastlin.out.tsv"    
-    
-    """
-
-    fastlin -d \$PWD -b ${params.fastlin_barcodes} -o ${fastlin_out_csv}
-   
-    echo '{"complete":"workflow complete without error"}' | jq '.' > ${error_log}
+    cp .command.err "${sample_name}_tbparser_command.err"
+    cp .command.log "${sample_name}_tbparser_command.log"
 
     """
-
-    stub:
-    """
-    mkdir ${sample_name}
-    touch ${sample_name}/${fastlin_out_csv}
-    """
-}
-
-
-process snippy{
-    tag { sample_name }
-    label 'snippy'
-    
-    publishDir "${params.output_dir}/${sample_name}/snippy", mode: 'copy', pattern: '*{.aligned.fa,*.bam,*.bai,*.bed,*.vcf.gz}', overwrite: 'true'
-    publishDir "${params.output_dir}/${sample_name}/snippy", mode: 'copy', overwrite: 'true', pattern: '*{_err.json,_report.json}'
-
-    input:
-    val(sample_name)
-    path(bam_path)
-    path(bai_path)
-
-
-    output:
-    tuple val(sample_name), path("${sample_name}.fastlin.out.tsv"), emit: snippy_outputs
-
-    script:
-    error_log = "${sample_name}_err.json"
-  
-    
-    """
-    snippy --reference ${params.tbdb_default_reference_genome} --bam ${bam_path} --cpus ${task.cpus} --outdir \$PWD/snippy_results
-
-    snippy-core --ref ${params.tbdb_default_reference_genome} --prefix ${sample_name} --gap-char - \$PWD/snippy_results
-   
-    echo '{"complete":"workflow complete without error"}' | jq '.' > ${error_log}
-    """
-
 
 }
